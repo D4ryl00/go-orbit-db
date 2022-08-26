@@ -371,7 +371,7 @@ type DirectChannelEmitter interface {
 type DirectChannelFactory func(ctx context.Context, emitter DirectChannelEmitter, opts *DirectChannelOptions) (DirectChannel, error)
 
 // StoreConstructor Defines the expected constructor for a custom store
-type StoreConstructor func(context.Context, coreapi.CoreAPI, *identityprovider.Identity, address.Address, *NewStoreOptions) (Store, error)
+type StoreConstructor func(context.Context, context.CancelFunc, coreapi.CoreAPI, *identityprovider.Identity, address.Address, *NewStoreOptions) (Store, error)
 
 // IndexConstructor Defines the expected constructor for a custom index
 type IndexConstructor func(publicKey []byte) StoreIndex

@@ -46,6 +46,8 @@ type BaseStore struct {
 		evtReplicate         event.Emitter
 	}
 
+	ctx               context.Context
+	cancelCtx         context.CancelFunc
 	id                string
 	identity          *identityprovider.Identity
 	address           address.Address
@@ -126,7 +128,10 @@ func (b *BaseStore) EventBus() event.Bus {
 }
 
 // InitBaseStore Initializes the store base
-func (b *BaseStore) InitBaseStore(ctx context.Context, ipfs coreapi.CoreAPI, identity *identityprovider.Identity, addr address.Address, options *iface.NewStoreOptions) error {
+func (b *BaseStore) InitBaseStore(ctx context.Context, cancel context.CancelFunc, ipfs coreapi.CoreAPI, identity *identityprovider.Identity, addr address.Address, options *iface.NewStoreOptions) error {
+	b.ctx = ctx
+	b.cancelCtx = cancel
+
 	var err error
 
 	if options == nil {
@@ -326,6 +331,11 @@ func (b *BaseStore) Close() error {
 	err := b.Cache().Close()
 	if err != nil {
 		return errors.Wrap(err, "unable to close cache")
+	}
+
+	if b.cancelCtx != nil {
+		b.cancelCtx()
+		b.cancelCtx = nil
 	}
 
 	return nil

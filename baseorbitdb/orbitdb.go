@@ -589,8 +589,8 @@ func (o *orbitDB) Open(ctx context.Context, dbAddress string, options *CreateDBO
 		return nil, errors.New(fmt.Sprintf("database %s doesn't exist!", dbAddress))
 	}
 
-	readctx, cancel := context.WithTimeout(ctx, options.Timeout)
-	defer cancel()
+	readctx, readCancel := context.WithTimeout(ctx, options.Timeout)
+	defer readCancel()
 
 	manifestNode, err := io.ReadCBOR(readctx, o.IPFS(), parsedDBAddress.GetRoot())
 	if err != nil {
@@ -758,7 +758,9 @@ func (o *orbitDB) createStore(ctx context.Context, storeType string, parsedDBAdd
 		options.Directory = &o.directory
 	}
 
-	store, err := storeFunc(ctx, o.IPFS(), identity, parsedDBAddress, &iface.NewStoreOptions{
+	ctx, cancel := context.WithCancel(ctx)
+
+	store, err := storeFunc(ctx, cancel, o.IPFS(), identity, parsedDBAddress, &iface.NewStoreOptions{
 		AccessController:  accessController,
 		Cache:             options.Cache,
 		Replicate:         options.Replicate,
@@ -771,11 +773,13 @@ func (o *orbitDB) createStore(ctx context.Context, storeType string, parsedDBAdd
 		StoreSpecificOpts: options.StoreSpecificOpts,
 	})
 	if err != nil {
+		cancel()
 		return nil, errors.Wrap(err, "unable to instantiate store")
 	}
 
 	topic, err := o.pubsub.TopicSubscribe(ctx, parsedDBAddress.String())
 	if err != nil {
+		cancel()
 		return nil, errors.Wrap(err, "unable to subscribe to pubsub")
 	}
 
@@ -786,10 +790,12 @@ func (o *orbitDB) createStore(ctx context.Context, storeType string, parsedDBAdd
 	// and the p2p network
 	if *options.Replicate {
 		if err := o.storeListener(ctx, store, topic); err != nil {
+			cancel()
 			return nil, errors.Wrap(err, "unable to store listener")
 		}
 
 		if err := o.pubSubChanListener(ctx, store, topic, parsedDBAddress); err != nil {
+			cancel()
 			return nil, errors.Wrap(err, "unable to listen on pubsub")
 		}
 	}
@@ -805,6 +811,7 @@ func (o *orbitDB) storeListener(ctx context.Context, store Store, topic iface.Pu
 
 	go func() {
 		defer sub.Close()
+
 		for {
 			var e interface{}
 
