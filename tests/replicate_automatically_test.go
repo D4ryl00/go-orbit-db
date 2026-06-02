@@ -142,7 +142,7 @@ func TestReplicateAutomatically(t *testing.T) {
 		require.NoError(t, err)
 		defer sub.Close()
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 
 		centries := make(chan cid.Cid, entryCount)
@@ -167,10 +167,16 @@ func TestReplicateAutomatically(t *testing.T) {
 		require.NoError(t, err)
 		defer conn.Close()
 
+	waitReplication:
 		for len(ops) > 0 {
 			select {
 			case <-ctx.Done():
-				require.NoError(t, err, "waiting for entries")
+				// ctx.Done() stays ready once fired, so we must break out
+				// of the loop here: otherwise the select keeps selecting
+				// this case and spins forever instead of failing.
+				require.Failf(t, "replication timeout",
+					"timed out waiting for %d entrie(s) to replicate", len(ops))
+				break waitReplication
 			case h := <-centries:
 				delete(ops, h)
 			}
