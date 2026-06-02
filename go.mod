@@ -235,3 +235,10 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.4.1 // indirect
 )
+
+// Temporary: boxo v0.34+ marks a peer unresponsive on a single bitswap send
+// failure, which sidelines a peer that reconnected (the disconnect is
+// suppressed) with no recovery path, hanging replication after a peer drops
+// and reconnects. Fixed in github.com/ipfs/boxo#1164; drop this replace once it
+// is released. Issue: github.com/ipfs/boxo#1163
+replace github.com/ipfs/boxo => github.com/D4ryl00/boxo v0.0.0-20260602133809-9092e7cec45f
