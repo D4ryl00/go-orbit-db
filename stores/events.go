@@ -87,12 +87,12 @@ type EventLoadProgress struct {
 	progress, max int
 }
 
-func NewEventLoadProgress(addr address.Address, h cid.Cid, e ipfslog.Entry, progress, max int) EventLoadProgress {
+func NewEventLoadProgress(addr address.Address, h cid.Cid, e ipfslog.Entry, progress, maxVal int) EventLoadProgress {
 	return EventLoadProgress{
 		Address:  addr,
 		Hash:     h,
 		Entry:    e,
-		progress: progress, max: max,
+		progress: progress, max: maxVal,
 	}
 }
 
