@@ -1032,7 +1032,15 @@ func (b *BaseStore) storeListener(topic iface.PubSubTopic) error {
 			}
 
 			evt := e.(stores.EventWrite)
-			go func() {
+			// Handle writes sequentially (not in a per-event goroutine):
+			// each write publishes a head announcement on pubsub, where
+			// messages get a monotonic seqno and the default
+			// BasicSeqnoValidator drops any message whose seqno is not
+			// strictly greater than the last one seen from this peer.
+			// Publishing concurrently would let our own announcements be
+			// emitted out of order, so the latest head can end up with a
+			// lower seqno and be dropped by remote peers, losing the entry.
+			func() {
 				// @TODO(gfanton): HandleEventWrite trigger a
 				// publish that is a blocking call if no peers
 				// is found, add a deadline to avoid to be stuck
