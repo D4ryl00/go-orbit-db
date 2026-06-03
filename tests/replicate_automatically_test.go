@@ -14,6 +14,7 @@ import (
 	"berty.tech/go-orbit-db/stores/operation"
 	cid "github.com/ipfs/go-cid"
 	"github.com/ipfs/kubo/core"
+	options "github.com/ipfs/kubo/core/coreiface/options"
 	"github.com/libp2p/go-libp2p/core/peer"
 	p2pmocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/assert"
@@ -236,6 +237,18 @@ func TestReplicateAutomatically(t *testing.T) {
 		case <-sub1.Out():
 			require.Fail(t, "Should not happen")
 		default:
+		}
+
+		// Wait until both stores have discovered each other on the pubsub topic
+		// before writing: handleEventWrite only announces a head when the topic
+		// already has peers, so writing before the gossipsub mesh has formed
+		// would silently drop the announcement and db2 would never replicate.
+		for _, store := range []orbitdb.EventLogStore{db1, db2} {
+			topic := store.Address().String()
+			require.Eventuallyf(t, func() bool {
+				peers, err := store.IPFS().PubSub().Peers(ctx, options.PubSub.Topic(topic))
+				return err == nil && len(peers) >= 1
+			}, time.Second*20, time.Millisecond*50, "store did not discover topic peer")
 		}
 
 		subCtx, subCancel := context.WithTimeout(ctx, 5*time.Second)

@@ -120,6 +120,18 @@ func testLogAppendReplicate(t *testing.T, amount int, nodeGen func(t *testing.T,
 	require.NoError(t, err)
 	defer sub.Close()
 
+	// Wait until both stores have discovered each other on the pubsub topic
+	// before writing: handleEventWrite only announces a head when the topic
+	// already has peers, so writing before the gossipsub mesh has formed would
+	// silently drop the announcement and store1 would never replicate.
+	for _, store := range []orbitdb.EventLogStore{store0, store1} {
+		topic := store.Address().String()
+		require.Eventuallyf(t, func() bool {
+			peers, err := store.IPFS().PubSub().Peers(ctx, options.PubSub.Topic(topic))
+			return err == nil && len(peers) >= 1
+		}, time.Second*20, time.Millisecond*50, "store did not discover topic peer")
+	}
+
 	events := make(map[replicateEvent]int)
 	cerr := make(chan error)
 	go func() {
