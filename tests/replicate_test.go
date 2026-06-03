@@ -15,8 +15,9 @@ import (
 	"berty.tech/go-orbit-db/pubsub/pubsubraw"
 	orbitstores "berty.tech/go-orbit-db/stores"
 	"berty.tech/go-orbit-db/stores/operation"
-	"github.com/libp2p/go-libp2p/p2p/host/eventbus"
+	options "github.com/ipfs/kubo/core/coreiface/options"
 	"github.com/libp2p/go-libp2p/core/event"
+	"github.com/libp2p/go-libp2p/p2p/host/eventbus"
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -264,6 +265,18 @@ func testLogAppendReplicateMultipeer(t *testing.T, npeer int, nodeGen func(t *te
 			subChans[i].Close()
 			_ = store.Close()
 		}(i)
+	}
+
+	// Wait until every store has discovered all the other peers on the pubsub
+	// topic before publishing: handleEventWrite only announces a head when the
+	// topic already has peers, so writing before the gossipsub mesh has formed
+	// would silently drop entries.
+	for i := 0; i < npeer; i++ {
+		topic := stores[i].Address().String()
+		require.Eventuallyf(t, func() bool {
+			peers, err := stores[i].IPFS().PubSub().Peers(ctx, options.PubSub.Topic(topic))
+			return err == nil && len(peers) >= npeer-1
+		}, time.Second*20, time.Millisecond*50, "store %d did not discover all topic peers", i)
 	}
 
 	centries := make([]chan ipfslog.Entry, npeer)
