@@ -869,27 +869,27 @@ func (b *BaseStore) AddOperation(ctx context.Context, op operation.Operation, on
 }
 
 func (b *BaseStore) recalculateReplicationProgress() {
-	max := b.ReplicationStatus().GetMax()
-	if progress := b.ReplicationStatus().GetProgress() + 1; progress < max {
-		max = progress
+	maxVal := b.ReplicationStatus().GetMax()
+	if progress := b.ReplicationStatus().GetProgress() + 1; progress < maxVal {
+		maxVal = progress
 	}
-	if opLogLen := b.OpLog().Len(); opLogLen > max {
-		max = opLogLen
+	if opLogLen := b.OpLog().Len(); opLogLen > maxVal {
+		maxVal = opLogLen
 
 	}
 
-	b.ReplicationStatus().SetProgress(max)
+	b.ReplicationStatus().SetProgress(maxVal)
 }
 
-func (b *BaseStore) recalculateReplicationMax(max int) {
-	if opLogLen := b.OpLog().Len(); opLogLen > max {
-		max = opLogLen
+func (b *BaseStore) recalculateReplicationMax(maxVal int) {
+	if opLogLen := b.OpLog().Len(); opLogLen > maxVal {
+		maxVal = opLogLen
 
-	} else if replMax := b.ReplicationStatus().GetMax(); replMax > max {
-		max = replMax
+	} else if replMax := b.ReplicationStatus().GetMax(); replMax > maxVal {
+		maxVal = replMax
 	}
 
-	b.ReplicationStatus().SetMax(max)
+	b.ReplicationStatus().SetMax(maxVal)
 }
 
 func (b *BaseStore) recalculateReplicationStatus(maxTotal int) {
@@ -1032,7 +1032,10 @@ func (b *BaseStore) storeListener(topic iface.PubSubTopic) error {
 			}
 
 			evt := e.(stores.EventWrite)
-			go func() {
+			// Publish head announcements sequentially: concurrent publishes
+			// can emit our pubsub messages out of seqno order, and the default
+			// BasicSeqnoValidator drops the lower-seqno head on remote peers.
+			func() {
 				// @TODO(gfanton): HandleEventWrite trigger a
 				// publish that is a blocking call if no peers
 				// is found, add a deadline to avoid to be stuck
