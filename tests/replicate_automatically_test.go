@@ -143,7 +143,13 @@ func TestReplicateAutomatically(t *testing.T) {
 		require.NoError(t, err)
 		defer sub.Close()
 
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		// Replication here runs the full reconnect path: the peers rejoin the
+		// topic, exchange heads, then db2 fetches the 10 entries over bitswap.
+		// That chain is inherently slow and, under -race -cover with the whole
+		// suite contending for CPU on CI runners, occasionally creeps past a
+		// tighter budget (observed ~23s). Give it generous headroom; the loop
+		// below still fails fast on a genuine stall rather than spinning.
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
 		centries := make(chan cid.Cid, entryCount)
