@@ -46,9 +46,13 @@ func TestReplicateAutomatically(t *testing.T) {
 
 		mocknet = testingMockNet(t)
 
+		// Build the nodes' pubsub ourselves with enlarged queues: kubo's default
+		// 32-slot queues silently drop head announcements under load, and with
+		// only two peers a dropped announcement has no gossip repair path (IHAVE
+		// is only sent to non-mesh peers). See pubsub_traced_test.go.
 		var node1Clean, node2Clean func()
-		node1, node1Clean = testingIPFSNode(ctx, t, mocknet)
-		node2, node2Clean = testingIPFSNode(ctx, t, mocknet)
+		node1, node1Clean = testingTracedIPFSNode(ctx, t, mocknet, "auto-node1", testPubsubQueueSize())
+		node2, node2Clean = testingTracedIPFSNode(ctx, t, mocknet, "auto-node2", testPubsubQueueSize())
 
 		ipfs1 := testingCoreAPI(t, node1)
 		ipfs2 := testingCoreAPI(t, node2)
@@ -257,13 +261,11 @@ func TestReplicateAutomatically(t *testing.T) {
 			}, time.Second*20, time.Millisecond*50, "store did not discover topic peer")
 		}
 
-		// Peers() reports only received SUBSCRIBEs, not gossipsub mesh membership
-		// (which has no public API). Once the subscriptions have propagated, give
-		// the mesh a heartbeat (~1s) to GRAFT before writing: a head announced to
-		// an ungrafted mesh is silently dropped and never re-announced.
-		time.Sleep(2 * time.Second)
-
-		subCtx, subCancel := context.WithTimeout(ctx, 5*time.Second)
+		// The receive loop below exits as soon as db2 has caught up, so this
+		// budget is only consumed on failure. Under -race -cover with the whole
+		// suite contending for CPU on CI runners, 5s proved too tight (the
+		// sibling reconnect subtest was observed needing ~23s for similar work).
+		subCtx, subCancel := context.WithTimeout(ctx, 60*time.Second)
 		defer subCancel()
 
 		sub2, err := db2.EventBus().Subscribe([]interface{}{
