@@ -257,6 +257,12 @@ func TestReplicateAutomatically(t *testing.T) {
 			}, time.Second*20, time.Millisecond*50, "store did not discover topic peer")
 		}
 
+		// Peers() reports only received SUBSCRIBEs, not gossipsub mesh membership
+		// (which has no public API). Once the subscriptions have propagated, give
+		// the mesh a heartbeat (~1s) to GRAFT before writing: a head announced to
+		// an ungrafted mesh is silently dropped and never re-announced.
+		time.Sleep(2 * time.Second)
+
 		subCtx, subCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer subCancel()
 
