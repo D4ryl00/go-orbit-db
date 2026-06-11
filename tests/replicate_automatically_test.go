@@ -46,9 +46,13 @@ func TestReplicateAutomatically(t *testing.T) {
 
 		mocknet = testingMockNet(t)
 
+		// Build the nodes' pubsub ourselves with enlarged queues: kubo's default
+		// 32-slot queues silently drop head announcements under load, and with
+		// only two peers a dropped announcement has no gossip repair path (IHAVE
+		// is only sent to non-mesh peers). See pubsub_traced_test.go.
 		var node1Clean, node2Clean func()
-		node1, node1Clean = testingIPFSNode(ctx, t, mocknet)
-		node2, node2Clean = testingIPFSNode(ctx, t, mocknet)
+		node1, node1Clean = testingTracedIPFSNode(ctx, t, mocknet, "auto-node1", testPubsubQueueSize())
+		node2, node2Clean = testingTracedIPFSNode(ctx, t, mocknet, "auto-node2", testPubsubQueueSize())
 
 		ipfs1 := testingCoreAPI(t, node1)
 		ipfs2 := testingCoreAPI(t, node2)
@@ -143,7 +147,13 @@ func TestReplicateAutomatically(t *testing.T) {
 		require.NoError(t, err)
 		defer sub.Close()
 
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		// Replication here runs the full reconnect path: the peers rejoin the
+		// topic, exchange heads, then db2 fetches the 10 entries over bitswap.
+		// That chain is inherently slow and, under -race -cover with the whole
+		// suite contending for CPU on CI runners, occasionally creeps past a
+		// tighter budget (observed ~23s). Give it generous headroom; the loop
+		// below still fails fast on a genuine stall rather than spinning.
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
 		centries := make(chan cid.Cid, entryCount)
@@ -251,7 +261,11 @@ func TestReplicateAutomatically(t *testing.T) {
 			}, time.Second*20, time.Millisecond*50, "store did not discover topic peer")
 		}
 
-		subCtx, subCancel := context.WithTimeout(ctx, 5*time.Second)
+		// The receive loop below exits as soon as db2 has caught up, so this
+		// budget is only consumed on failure. Under -race -cover with the whole
+		// suite contending for CPU on CI runners, 5s proved too tight (the
+		// sibling reconnect subtest was observed needing ~23s for similar work).
+		subCtx, subCancel := context.WithTimeout(ctx, 60*time.Second)
 		defer subCancel()
 
 		sub2, err := db2.EventBus().Subscribe([]interface{}{

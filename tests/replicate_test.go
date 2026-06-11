@@ -398,7 +398,10 @@ func testDirectChannelNodeGenerator(t *testing.T, mn mocknet.Mocknet, i int) (or
 	dbPath1, clean := testingTempDir(t, fmt.Sprintf("db%d", i))
 	closeOps = append(closeOps, clean)
 
-	node1, clean := testingIPFSNode(ctx, t, mn)
+	// Build the node's pubsub ourselves with enlarged queues: kubo's default
+	// 32-slot queues silently drop head announcements during concurrent write
+	// bursts (see pubsub_traced_test.go).
+	node1, clean := testingTracedIPFSNode(ctx, t, mn, fmt.Sprintf("direct-channel-node%d", i), testPubsubQueueSize())
 	closeOps = append(closeOps, clean)
 
 	// logger, _ := zap.NewDevelopment()
@@ -440,7 +443,10 @@ func testDefaultNodeGenerator(t *testing.T, mn mocknet.Mocknet, i int) (orbitdb.
 	dbPath1, clean := testingTempDir(t, fmt.Sprintf("db%d", i))
 	closeOps = append(closeOps, clean)
 
-	node1, clean := testingIPFSNode(ctx, t, mn)
+	// Build the node's pubsub ourselves with enlarged queues: kubo's default
+	// 32-slot queues silently drop head announcements during concurrent write
+	// bursts (see pubsub_traced_test.go).
+	node1, clean := testingTracedIPFSNode(ctx, t, mn, fmt.Sprintf("default-node%d", i), testPubsubQueueSize())
 	closeOps = append(closeOps, clean)
 
 	ipfs1 := testingCoreAPI(t, node1)
